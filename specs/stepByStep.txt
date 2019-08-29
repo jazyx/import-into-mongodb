@@ -1,0 +1,10 @@
+Initial state of databases:
+
+{ databases: 
+   [ { name: 'admin', sizeOnDisk: 40960, empty: false },
+     { name: 'config', sizeOnDisk: 20480, empty: false },
+     { name: 'local', sizeOnDisk: 73728, empty: false } ],
+  totalSize: 135168,
+  ok: 1 }
+
+
