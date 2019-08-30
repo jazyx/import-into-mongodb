@@ -1,27 +1,28 @@
-{ "name": "Import into mongodb"
-, "version": "1.0.0"
-, "description": "App to read file and reformat data as json, then import into mongodb"
-, "main": "app.js"
-, "dependencies": {
-    "mongodb": "^3.3.2"
-  }
-, "devDependencies": {}
-, "scripts": {
-    "test": "test"
-  }
-, "repository": {
-    "type": "git"
-  , "url": "git+ssh://git@github.com/jazyx/import-into-mongodb.git"
-  }
-, "keywords": [
-    "mongodb"
-  , "mongo"
-  , "node"
-  ]
-, "author": "james@lexogram.com"
-, "license": "ISC"
-, "bugs": {
-    "url": "https://github.com/jazyx/import-into-mongodb/issues"
-  }
-, "homepage": "https://github.com/jazyx/import-into-mongodb#readme"
+{
+    "name": "Import-into-mongodb",
+    "version": "1.0.0",
+    "description": "App to read file and reformat data as json, then import into mongodb",
+    "main": "app.js",
+    "dependencies": {
+        "mongodb": "^3.3.2"
+    },
+    "devDependencies": {},
+    "scripts": {
+        "test": "test"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+ssh://git@github.com/jazyx/import-into-mongodb.git"
+    },
+    "keywords": [
+        "mongodb",
+        "mongo",
+        "node"
+    ],
+    "author": "james@lexogram.com",
+    "license": "ISC",
+    "bugs": {
+        "url": "https://github.com/jazyx/import-into-mongodb/issues"
+    },
+    "homepage": "https://github.com/jazyx/import-into-mongodb#readme"
 }
