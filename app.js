@@ -5,7 +5,7 @@
  * 
  *   node app.js <fileName> <dbName> 
  *   
- * If either of these arguments are missing, you will be asked to
+ * You will be asked to
  * provide them.
  */
 
@@ -17,13 +17,15 @@ const fs = require('fs')
 // Connection URL
 const mongoURL = 'mongodb://localhost:27017';
 
-
+// Set up command line interface
+readline.emitKeypressEvents(process.stdin);
+process.stdin.setRawMode(true)
 
 ;(function getSourceAndTarget([
   runtime
   , scriptname
-  , dbName = "flashcards"
   , fileName = ""
+  , dbName = "flashcards"
   ]) {
 
   const rl = readline.createInterface({
@@ -37,6 +39,7 @@ const mongoURL = 'mongodb://localhost:27017';
   }
   const dbPrompt = getPrompt("Database to use", dbName)
   const filePrompt = getPrompt("Import from file", fileName)
+  const validation = "Confirm import? (y | any other key for No): "
 
   rl.question(filePrompt, (answer) => {
     check("fileName", answer) // will call rl again with dbName
@@ -54,25 +57,46 @@ const mongoURL = 'mongodb://localhost:27017';
 
 
   function check(type, answer) {
-    if (!answer && !data[type]) {
+    if (!answer && !data[type] && type !== "validate") {
       return shutDown(
-        "App requires database name and file name for import."
+        "App requires a path to the file to import and a database name"
       )
 
     } else if (answer) {
       data[type] = stripQuotes(answer)
     }
 
-    if (type === "fileName") {
-      data.collection = getParentFolderName(data.fileName)
+    switch (type) {
+      case "fileName":
+        return addFileNameAndCollection(answer)
 
-      rl.question(dbPrompt, (answer) => {
-        check("dbName", answer)
-      })
-    } else {
-      rl.close()
-      checkSource(data)
+      case "dbName":
+        return validate()
+    
+      case "validate":
+        rl.close()
+        process.stdin.setRawMode(false)
+        startTreatment(answer)
     }
+  }
+
+
+  function addFileNameAndCollection(fileName) {
+    data.collection = getParentFolderName(data.fileName)
+
+    rl.question(dbPrompt, (answer) => {
+      check("dbName", answer)
+    })
+  }
+
+
+  function validate() {
+    // Prepare to react to the very next keypress
+    process.stdin.once("keypress", (char, keyData) => {
+      check("validate", char)
+    })
+
+    rl.write(validation) 
   }
 
 
@@ -89,7 +113,7 @@ const mongoURL = 'mongodb://localhost:27017';
       let isQuote = quotes.indexOf(char) > 0
 
       if (isQuote) {
-        isQuote = string[last] = char
+        isQuote = string[last] === char
         if (isQuote) {
           string = string.substring(1, last)
           last -= 2
@@ -102,16 +126,21 @@ const mongoURL = 'mongodb://localhost:27017';
 
 
   function getParentFolderName(filePath) {
-    // /path/to/parentFolder/phrases.txt
+    // /path/to/.../parentFolder/phrases.txt
     let array = filePath.split("/")
     array.pop() // phrases.txt
-    return array.pop() // name of parent folder
+    return array.pop() // parentFolder
   }
 
 
-  function shutDown(reason) { 
-    console.log(reason + "Quitting now")
-    process.exit();
+  function startTreatment(answer) {
+    rl.close()
+
+    if (answer.toLowerCase() === "y") {
+      checkSource(data)
+    } else {
+      console.log("Operation cancelled by user")
+    }
   }
 })(process.argv)
 
@@ -131,11 +160,60 @@ function checkSource({ dbName, fileName, collection }) {
   function parseFile(error, data) {
     if (error) {
       shutDown(error)
-    } else {
-      let array = convertToPhraseArray(data)
-      console.log("Number of entries: " + array.length)
-      addToMondoDB(dbName, collection, array)
+
     }
+
+    // data should start with ...
+    // 
+    //   #FLASHCARDS
+    //   
+    // on the first line, all by itself, and this should be followed
+    // on a new line by a series of digits and then some whitespace.
+    // 
+    let regex = /^\s*#FLASHCARDS\s*\n\s*\d+/
+    if (!regex.test(data)) {
+      // This file is probably not a flashcard file
+      error = "Is this a Flashcard file?\n  " 
+      + "If so, please set the first line to...\n\n  "
+      + "#FLASHCARDS\n\n  "
+      + "... and try again."
+
+      + "\n\n" + data.substring(0, 100)
+
+      shutDown(error)
+    }
+
+    let array = convertToPhraseArray(data)
+
+    if (array.length < 2) {
+      error = "File "+fileName+"not formatted as flashcards.\n\n  "
+            + "Please contact james@lexogram.com for details."
+      shutDown(error)
+    }
+
+    // Check for duplicate audio file numbers
+    let length = array.length
+    let _ids = []
+    let duplicates = []
+    array.forEach(item => {
+      if (_ids.indexOf(item._id) < 0) {
+        _ids.push(item._id)
+      } else {
+        duplicates.push(item._id)
+      }
+    })
+
+    if (duplicates.length) {
+      error = 
+      "Duplicate item numbers (file names) exist:\n\n"
+      + "  - " + duplicates.join("\n  - ")
+      + "\n\n  Please ensure that item numbers are unique and try again."
+    
+      shutDown(error)
+    }
+
+    // If we get here, all seems to be well
+    addToMondoDB(dbName, collection, array)
   }
 }
 
@@ -203,19 +281,16 @@ function convertToPhraseArray(rawText) {
     array.indexOf(code) === index
   ))
 
-
   let chunkRegex = languageCodes.reduce((regex, code) => {
     return regex += `|^\\s*${code}`
   }, "\n*(\\d+") + ")\\s+"
   chunkRegex = new RegExp(chunkRegex)
 
-  // console.log(chunkRegex)
-
   // Regex to break rawText up at numbered file names
   let phraseRegex = /(?:^|\n+)\s*(?=\d+\s+)/
 
   // Regex to break card data into languages
-  let dataRegex = /\n+/
+  let dataRegex = /\n\s*/
   let filter = item => item.trim() !== ""
 
   let cardArray = rawText.split(phraseRegex)
@@ -237,23 +312,10 @@ function convertToPhraseArray(rawText) {
   }
 
 
-  // function getID() {
-  //   let id = "" + counter++
-  //   let zeros = Math.max(4 - id.length, 0)
-  //   let padding = ""
-
-  //   while (zeros--) {
-  //     padding += "0"
-  //   }
-
-  //   return idSeed + padding + id
-  // }
-
-
   let treatCard = (cardString, index) => {
+    let notYetAdded = true
     let cardData = {
       index: index
-    // , _id: getID()
     }
     let languageChunks = cardString.split(dataRegex)
                                    .filter(filter)
@@ -301,7 +363,10 @@ function convertToPhraseArray(rawText) {
         }
       }
 
-      cardArray[index] = cardData
+      if (cardData.audio && notYetAdded) {
+        cardArray[index] = cardData
+        notYetAdded = false
+      }
     }
 
     languageChunks.forEach(addBits)
@@ -318,11 +383,6 @@ function convertToPhraseArray(rawText) {
 
 
 function addToMondoDB(dbName, collectionName, array) {
-  // console.log(
-  //   " dbName:    ", dbName + "\n"
-  // , "collection:  ", collection + "\n"
-  // , "array.length:", array.length)
-
   const length = array.length
   const sanctions = {
     useNewUrlParser: true
@@ -338,21 +398,52 @@ function addToMondoDB(dbName, collectionName, array) {
       shutDown(error)
     }
 
-    console.log("Connected successfully to server")
+    const db = client.db(dbName) // sync. db will be created if absent 
+    const collectionsCursor = db.listCollections() // sync
 
-    const db = client.db(dbName)
-    const collection = db.collection(collectionName)
-  
-    collection.insertMany(array, insertCallback)
+    // Make a backup of collectionName if it already exists...
+    let renameCollection = false
+    collectionsCursor.forEach(iterator, iterationComplete)
 
-    function insertCallback(err, result) {
-      console.log(result)
 
-      assert.equal(err, null)
-      assert.equal(length, result.result.n)
-      assert.equal(length, result.ops.length)
-      console.log(`Inserted ${length} documents into ${collection}`);
-      client.close()
+    function iterator (collection) {
+      if (collection && collection.name === collectionName) {
+        renameCollection = true
+
+        // ... then create a new collection after backup is made...
+        db.renameCollection(
+          collectionName
+        , collectionName + "_bkk"
+        , { dropTarget: true }
+        , addCollection)
+      }
+    }
+
+
+    function iterationComplete() {
+      if (!renameCollection) {
+        // ... or now, if there was no initial collection to back up
+        addCollection()
+      }
+    }
+
+
+    function addCollection(error, result) {
+      const collection = db.collection(collectionName)
+    
+      collection.insertMany(array, insertCallback)
+
+      function insertCallback(err, result) {
+        assert.equal(err, null)
+        assert.equal(length, result.result.n)
+        assert.equal(length, result.ops.length)
+
+        console.log(
+          `\n\nInserted ${length} documents into ${collectionName}`
+        );
+
+        client.close()
+      }
     }
   }
 }
