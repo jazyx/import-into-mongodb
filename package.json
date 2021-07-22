@@ -4,7 +4,7 @@
     "description": "App to read file and reformat data as json, then import into mongodb",
     "main": "app.js",
     "dependencies": {
-        "mongodb": "^3.3.2"
+        "mongodb": "^3.6.9"
     },
     "devDependencies": {},
     "scripts": {
